@@ -976,4 +976,20 @@
 
             function animate() {
                 ctx.clearRect(0,0, canvas.width, canvas.height);
-                stars.forEach(s =>
+                stars.forEach(s => {
+                    s.opacity += s.speed;
+                    if (s.opacity > 1 || s.opacity < 0) s.speed *= -1;
+                    ctx.fillStyle = `rgba(255, 255, 255, ${Math.abs(s.opacity)})`;
+                    ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2); ctx.fill();
+                });
+                requestAnimationFrame(animate);
+            }
+            animate();
+        }
+
+        function showMap() { showCustomAlert("Mappa", "La schermata della mappa sarà sbloccata presto!"); }
+
+        window.onload = init; 
+    </script>
+</body>
+</html>
