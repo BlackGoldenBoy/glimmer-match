@@ -251,6 +251,20 @@
         .custom-alert-message { color: #ddd; font-size: 0.95rem; margin-bottom: 20px; line-height: 1.4; }
         .countdown-wrapper { margin: 20px 0; font-size: 2rem; font-weight: bold; color: var(--accent-gold); }
 
+        /* Map Modal */
+        .map-box { max-height: 85vh; overflow-y: auto; padding: 20px; }
+        .map-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 15px; margin-top: 20px; }
+        .map-level-btn {
+            background: #2a2a2a; border: 2px solid #444; border-radius: 15px; padding: 15px 10px;
+            color: white; font-weight: bold; cursor: pointer; transition: all 0.3s;
+            display: flex; flex-direction: column; align-items: center; gap: 5px;
+        }
+        .map-level-btn.unlocked { border-color: var(--accent-gold); background: rgba(212, 175, 55, 0.1); }
+        .map-level-btn.unlocked:hover { transform: scale(1.05); background: rgba(212, 175, 55, 0.2); }
+        .map-level-btn.locked { opacity: 0.5; cursor: not-allowed; }
+        .map-level-btn.current { border-color: var(--dark-pink); background: rgba(240, 98, 146, 0.2); box-shadow: 0 0 15px rgba(240, 98, 146, 0.5); }
+        .map-level-icon { font-size: 1.5rem; }
+
         @media (max-width: 400px) {
             .top-bar { padding: 10px; }
             .stats-card { padding: 8px 10px; }
@@ -420,6 +434,18 @@
             <ul id="leaderboard-list" class="leaderboard-list">
                 <li style="color: #ccc;">Caricamento in corso...</li>
             </ul>
+        </div>
+    </div>
+
+    <!-- Modale Mappa -->
+    <div id="map-modal" class="modal-overlay">
+        <div class="modal map-box">
+            <button class="close-modal-x" onclick="closeMap()">✖</button>
+            <h2 style="color: var(--dark-pink); margin-top: 0;">🗺️ Mappa dei Livelli</h2>
+            <p style="color: #ccc; font-size: 0.9rem;">Seleziona un livello sbloccato per giocarci.</p>
+            <div id="map-grid" class="map-grid">
+                <!-- I livelli verranno generati qui -->
+            </div>
         </div>
     </div>
 
@@ -1150,7 +1176,56 @@
             animate();
         }
 
-        function showMap() { showCustomAlert("Mappa", "La schermata della mappa sarà sbloccata presto!"); }
+        function showMap() {
+            const mapGrid = document.getElementById('map-grid');
+            mapGrid.innerHTML = '';
+            
+            // Mostra fino a 20 livelli o fino al livello massimo sbloccato + 5
+            const maxDisplayLevel = Math.max(20, state.maxLevel + 5);
+            
+            for (let i = 1; i <= maxDisplayLevel; i++) {
+                const btn = document.createElement('button');
+                const isUnlocked = i <= state.maxLevel;
+                const isCurrent = i === state.level;
+                
+                btn.className = `map-level-btn ${isUnlocked ? 'unlocked' : 'locked'} ${isCurrent ? 'current' : ''}`;
+                
+                let icon = '🔒';
+                if (isCurrent) icon = '📍';
+                else if (isUnlocked) icon = '⭐';
+                
+                btn.innerHTML = `
+                    <span class="map-level-icon">${icon}</span>
+                    <span>Livello ${i}</span>
+                `;
+                
+                if (isUnlocked) {
+                    btn.onclick = () => {
+                        state.level = i;
+                        state.exp = 0;
+                        state.expNeeded = 100 + ((i - 1) * 50);
+                        updateWorld();
+                        updateUI();
+                        createBoard();
+                        saveProgress();
+                        closeMap();
+                        showCustomAlert("Livello Caricato", `Sei tornato al Livello ${i}`);
+                    };
+                } else {
+                    btn.onclick = () => {
+                        showCustomAlert("Livello Bloccato", "Devi prima completare i livelli precedenti per sbloccare questo.");
+                    };
+                }
+                
+                mapGrid.appendChild(btn);
+            }
+            
+            document.getElementById('map-modal').style.display = 'flex';
+        }
+
+        function closeMap() {
+            document.getElementById('map-modal').style.display = 'none';
+        }
 
         window.onload = init; 
     </script>
