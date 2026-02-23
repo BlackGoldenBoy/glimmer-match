@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Glimmer Match: Edizione Cristallo</title>
+    
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    
+    <!-- API Ufficiale di YouTube -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+
+    <style>
+        :root {
+            --primary-pink: #fce4ec;
+            --dark-pink: #f06292;
+            --accent-gold: #d4af37;
+            --glass-bg: rgba(255, 255, 255, 0.8);
+            --font-main: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * { box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            margin: 0; padding: 0; 
+            font-family: var(--font-main);
+            display: flex; flex-direction: column; align-items: center; height: 100vh;
+            overflow: hidden; 
+        }
+
+        #game-bg {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: #fce4ec;
+            background-size: cover; background-position: center;
+            z-index: -2; transition: background-image 1s ease-in-out;
+        }
+
+        body::after {
+            content: ""; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(180deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.4) 100%); z-index: -1;
+        }
+
+        .top-bar { width: 100%; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; z-index: 100; }
+
+        .stats-card {
+            background: var(--glass-bg); padding: 10px 15px; border-radius: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); border: 1px solid white; backdrop-filter: blur(10px);
+        }
+
+        .balance { font-size: 1.4rem; font-weight: bold; color: #2e7d32; display: flex; align-items: center; gap: 5px; }
+        .level-info { font-size: 0.8rem; color: var(--dark-pink); font-weight: bold; margin-top: 2px; }
+        .progress-container { width: 100px; height: 6px; background: #eee; border-radius: 3px; margin-top: 5px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--accent-gold); width: 0%; transition: width 0.3s ease; }
+
+        .btn-action {
+            background: var(--dark-pink); color: white; border: none; padding: 10px 20px;
+            border-radius: 50px; font-weight: bold; cursor: pointer;
+            box-shadow: 0 4px 10px rgba(240, 98, 146, 0.3); font-size: 0.9rem; transition: transform 0.2s;
+            white-space: nowrap;
+        }
+        .btn-action:active { transform: scale(0.95); }
+        .btn-action:disabled { background: #888; cursor: not-allowed; box-shadow: none; opacity: 0.7; }
+
+        .game-header { text-align: center; margin: 10px 0; }
+        .game-header h1 { margin: 0; font-size: 1.5rem; color: var(--dark-pink); text-shadow: 2px 2px 4px rgba(255,255,255,0.8); }
+        .moves-badge { display: inline-block; background: white; padding: 5px 15px; border-radius: 15px; font-weight: bold; margin-top: 5px; border: 2px solid var(--primary-pink); }
+
+        .board-wrapper { flex-grow: 1; display: flex; align-items: center; justify-content: center; width: 100%; padding: 10px; position: relative; }
+        
+        .grid {
+            display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px;
+            background: rgba(30, 30, 30, 0.6); /* Sfondo griglia scuro per risaltare i cerchi bianchi */
+            padding: 10px; border-radius: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.5); width: 95vmin; height: 95vmin;
+            max-width: 450px; max-height: 450px; backdrop-filter: blur(5px);
+        }
+
+        .cell { 
+            background: transparent; /* Rimosso sfondo grigio cella */
+            border-radius: 50%; 
+            aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; position: relative; 
+        }
+
+        /* --- STILI GEMME --- */
+        .gem { 
+            width: 100%; height: 100%; 
+            cursor: pointer; 
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+            z-index: 2; display: flex; align-items: center; justify-content: center;
+        }
+
+        /* STILE PRODOTTO: Cerchio Bianco Puro con Bordo Oro */
+        .gem.product-type {
+            background-color: #ffffff; /* Bianco puro per fondersi con le foto */
+            border-radius: 50%; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            border: 2px solid var(--accent-gold); /* Bordo dorato elegante */
+            overflow: hidden;
+            width: 94%; height: 94%; 
+        }
+        
+        .gem.product-type .gem-img {
+            width: 90%; height: 90%; 
+            object-fit: contain; /* Adatta l'immagine senza tagliarla */
+            pointer-events: none;
+        }
+
+        /* STILE STELLA: Libera e brillante */
+        .gem.star-type {
+            background: none;
+            box-shadow: none;
+            border: none;
+            overflow: visible;
+        }
+
+        .gem.star-type svg {
+            width: 110%; height: 110%;
+            filter: drop-shadow(0 0 5px rgba(255, 215, 0, 0.8)); /* Glow dorato */
+            pointer-events: none;
+        }
+
+        .gem.dragging { transform: scale(1.3); z-index: 100; opacity: 0.9; }
+        .gem.match { animation: popOut 0.4s forwards; }
+
+        @keyframes popOut { 0% { transform: scale(1); } 50% { transform: scale(1.3); opacity: 0.5; } 100% { transform: scale(0); opacity: 0; } }
+
+        /* Floating Buttons */
+        .floating-btn {
+            position: fixed; bottom: 20px; width: 60px; height: 60px;
+            border-radius: 50%; display: none; align-items: center; justify-content: center;
+            font-size: 28px; color: white; cursor: pointer; z-index: 100;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.6); border: 3px solid rgba(255,255,255,0.4);
+            transition: all 0.3s ease;
+        }
+        .floating-btn:hover { transform: scale(1.1); border-color: white; }
+        #profile-btn-floating { right: 20px; background: linear-gradient(135deg, #f06292, #ab47bc); }
+        #wallet-btn-floating { left: 20px; background: linear-gradient(135deg, #43a047, #66bb6a); }
+
+        /* SOS Button */
+        .rescue-btn {
+            background: linear-gradient(45deg, #ff5252, #f48fb1); color: white;
+            border: 2px solid white; padding: 12px 25px; border-radius: 50px;
+            font-weight: bold; cursor: pointer; box-shadow: 0 5px 20px rgba(0,0,0,0.4);
+            animation: pulse 2s infinite; display: none; margin-top: 15px; font-size: 1rem; z-index: 50;
+        }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+
+        /* Modals */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center;
+            z-index: 1000; backdrop-filter: blur(5px);
+        }
+        .modal { background: #1a1a1a; color: white; padding: 30px; border-radius: 25px; text-align: center; max-width: 350px; width: 90%; border: 2px solid #333; position: relative; }
+
+        .close-modal-x {
+            position: absolute; top: 15px; right: 20px; background: transparent; border: none;
+            color: #888; font-size: 1.5rem; cursor: pointer; transition: color 0.3s; padding: 0;
+        }
+        .close-modal-x:hover { color: var(--dark-pink); }
+
+        #stars-canvas { position: fixed; top: 0; left: 0; pointer-events: none; z-index: 1; }
+
+        /* Input Forms */
+        .input-field {
+            width: 100%; padding: 12px; margin: 8px 0; border: 2px solid #444; background: #2a2a2a; color: white;
+            border-radius: 10px; font-family: var(--font-main); outline: none; transition: border-color 0.3s;
+        }
+        .input-field:focus { border-color: var(--dark-pink); }
+        .auth-box, .leaderboard-box { max-height: 85vh; overflow-y: auto; }
+        
+        .auth-tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid #333; }
+        .auth-tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; color: #888; font-weight: bold; }
+        .auth-tab.active { color: var(--dark-pink); border-bottom: 3px solid var(--dark-pink); }
+
+        .tabs { display: flex; justify-content: space-around; margin-bottom: 15px; }
+        .tab-btn { background: transparent; border: none; font-weight: bold; color: #888; cursor: pointer; padding: 5px 10px; border-bottom: 3px solid transparent; }
+        .tab-btn.active { color: var(--dark-pink); border-bottom: 3px solid var(--dark-pink); }
+        
+        .leaderboard-list { list-style: none; padding: 0; margin: 0; text-align: left; }
+        .leaderboard-list li { display: flex; align-items: center; justify-content: space-between; padding: 10px; border-bottom: 1px solid #333; font-size: 0.9rem; }
+        .rank-user { display: flex; align-items: center; gap: 10px; font-weight: bold; }
+        .rank-avatar { width: 35px; height: 35px; border-radius: 50%; object-fit: cover; background: #444; border: 1px solid var(--primary-pink); }
+        .rank-score { color: #81c784; font-weight: bold; }
+
+        /* Profile */
+        .profile-field-group { text-align: left; margin-bottom: 15px; }
+        .profile-field-group label { font-size: 0.75rem; color: #aaa; margin-bottom: 4px; display: block; font-weight: bold; letter-spacing: 1px; }
+        .input-wrapper { display: flex; align-items: center; gap: 8px; }
+        .profile-readonly-input { flex: 1; padding: 12px; border: 1px solid #222; background: #0a0a0a; color: #666; border-radius: 10px; font-family: var(--font-main); outline: none; transition: all 0.3s; margin: 0; }
+        .profile-readonly-input.editable { background: #2a2a2a; color: white; border-color: var(--dark-pink); }
+        .field-edit-btn { background: #333; color: #ccc; border: 1px solid #555; padding: 12px 10px; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 0.75rem; transition: all 0.3s; white-space: nowrap; height: 100%; }
+        .field-edit-btn:hover { background: var(--dark-pink); color: white; border-color: var(--dark-pink); }
+
+        /* Wallet */
+        .wallet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .coupon-card { background: #2a2a2a; border: 1px dashed var(--accent-gold); padding: 10px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+        .coupon-code { font-family: monospace; font-size: 1.1rem; color: var(--accent-gold); letter-spacing: 1px; }
+        .coupon-value { font-size: 0.8rem; color: white; font-weight: bold; }
+        .btn-copy { background: #444; border: none; color: white; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 0.7rem; }
+
+        /* Alerts Custom */
+        .custom-alert-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 9999; backdrop-filter: blur(8px); opacity: 0; transition: opacity 0.3s ease; }
+        .custom-alert-overlay.show { display: flex; opacity: 1; }
+        .custom-alert-box { background: #1a1a1a; color: white; padding: 25px; border-radius: 20px; text-align: center; max-width: 300px; width: 90%; border: 2px solid var(--dark-pink); transform: scale(0.8); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .custom-alert-overlay.show .custom-alert-box { transform: scale(1); }
+        .custom-alert-title { color: var(--dark-pink); margin-top: 0; margin-bottom: 10px; font-size: 1.3rem; }
+        .custom-alert-message { color: #ddd; font-size: 0.95rem; margin-bottom: 20px; line-height: 1.4; }
+        .countdown-wrapper { margin: 20px 0; font-size: 2rem; font-weight: bold; color: var(--accent-gold); }
+
+        @media (max-width: 400px) {
+            .top-bar { padding: 10px; }
+            .stats-card { padding: 8px 10px; }
+            .balance { font-size: 1.1rem; }
+            .btn-action { padding: 8px 12px; font-size: 0.75rem; }
+            .game-header h1 { font-size: 1.2rem; }
+            .modal { padding: 20px; }
+            .field-edit-btn { padding: 10px 8px; font-size: 0.7rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-bg"></div>
+    <canvas id="stars-canvas"></canvas>
+
+    <!-- Top Bar -->
+    <div class="top-bar">
+        <div class="stats-card">
+            <div class="balance">✨ <span id="credit-val">0.00</span>€</div>
+            <div class="level-info">LIVELLO <span id="level-val">1</span></div>
+            <div class="progress-container"><div id="progress-fill" class="progress-fill"></div></div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+            <button class="btn-action" onclick="showLeaderboard()">🏆 CLASSIFICA</button>
+            <button class="btn-action" onclick="showMap()">🗺️ MAPPA</button>
+        </div>
+    </div>
+
+    <div class="game-header">
+        <h1 id="world-name">Bosco Incantato</h1>
+        <div class="moves-badge">⚡ Energia: <span id="moves-val">10</span></div>
+    </div>
+
+    <div class="board-wrapper">
+        <div id="grid" class="grid"></div>
+    </div>
+    
+    <div style="width: 100%; display: flex; justify-content: center;">
+        <button id="rescue-btn" class="rescue-btn" onclick="openOutOfMovesModal()">🎥 OTTIENI VITE</button>
+    </div>
+
+    <div id="wallet-btn-floating" class="floating-btn" onclick="openWalletModal()">💰</div>
+    <div id="profile-btn-floating" class="floating-btn" onclick="openProfileModal()">👤</div>
+
+    <!-- Modale Fine Energia -->
+    <div id="out-of-moves-modal" class="modal-overlay">
+        <div class="modal" id="out-of-moves-content">
+            <button class="close-modal-x" onclick="closeOutOfMovesModal()">✖</button>
+            <h2 style="color: var(--dark-pink); margin-top: 0;">Energia Esaurita!</h2>
+            <p style="color: #ccc;">Guarda un breve video del canale FataNail per ricevere 5 mosse bonus!</p>
+            <button class="btn-action" onclick="startVideoReward()" style="width: 100%; padding: 15px;">GUARDA VIDEO (+5 ⚡)</button>
+            <p style="font-size: 0.7rem; margin-top: 10px; color: #777;">Oppure attendi la ricarica domani.</p>
+        </div>
+        <div class="modal" id="video-reward-content" style="display: none; padding: 20px;">
+            <button class="close-modal-x" onclick="closeOutOfMovesModal()">✖</button>
+            <h3 style="color: var(--dark-pink); margin-top: 0; font-size: 1.1rem;">Video in corso...</h3>
+            <p style="font-size: 0.8rem; color: #aaa; margin: 5px 0;">Il video si è aperto in una nuova scheda. Torna qui quando il timer finisce!</p>
+            <div class="countdown-wrapper" id="timer-display">15</div>
+            <button id="claim-btn" class="btn-action" onclick="grantVideoReward()" style="width: 100%; padding: 15px; opacity: 0.5;" disabled>ATTENDI...</button>
+        </div>
+    </div>
+
+    <!-- Modale Autenticazione -->
+    <div id="auth-modal" class="modal-overlay" style="display: flex;">
+        <div class="modal auth-box">
+            <h2 style="color: var(--dark-pink); margin-top: 0;">Benvenuto!</h2>
+            <div class="auth-tabs">
+                <div id="tab-login" class="auth-tab active" onclick="switchAuthMode('login')">ACCEDI</div>
+                <div id="tab-register" class="auth-tab" onclick="switchAuthMode('register')">REGISTRATI</div>
+            </div>
+            <div id="register-form" style="display: none;">
+                <input type="text" id="reg-nome" placeholder="Nome" class="input-field">
+                <input type="text" id="reg-cognome" placeholder="Cognome" class="input-field">
+                <input type="text" id="reg-nickname" placeholder="Nickname" class="input-field">
+                <input type="tel" id="reg-telefono" placeholder="Numero di Telefono" class="input-field">
+            </div>
+            <input type="email" id="auth-email" placeholder="Email" class="input-field">
+            <input type="password" id="auth-password" placeholder="Password" class="input-field">
+            <button class="btn-action" id="auth-btn" onclick="handleAuth()" style="width: 100%; margin-top: 15px; font-size: 1.1rem;">ENTRA</button>
+        </div>
+    </div>
+
+    <!-- Modale Portafoglio -->
+    <div id="wallet-modal" class="modal-overlay">
+        <div class="modal leaderboard-box">
+            <button class="close-modal-x" onclick="document.getElementById('wallet-modal').style.display='none'">✖</button>
+            <h2 style="color: var(--accent-gold); margin-top: 0;">💎 Portafoglio</h2>
+            <p style="color:#ccc; font-size:0.9rem;">Saldo Attuale: <strong id="wallet-balance" style="color:white; font-size:1.2rem;">0.00€</strong></p>
+            <h3 style="color: var(--dark-pink); text-align:left; font-size:1rem; margin-top:20px;">Riscatta Buoni:</h3>
+            <div class="wallet-grid">
+                <button class="btn-action" onclick="askConfirmClaim(5)" style="background:#2e7d32;">5€</button>
+                <button class="btn-action" onclick="askConfirmClaim(10)" style="background:#2e7d32;">10€</button>
+                <button class="btn-action" onclick="askConfirmClaim(25)" style="background:#1565c0;">25€</button>
+                <button class="btn-action" onclick="askConfirmClaim(50)" style="background:#6a1b9a;">50€</button>
+            </div>
+            <h3 style="color: var(--dark-pink); text-align:left; font-size:1rem; margin-top:20px;">I tuoi Coupon:</h3>
+            <div id="coupon-list" style="display:flex; flex-direction:column; gap:10px;">
+                <p style="color:#666; font-size:0.8rem;">Nessun coupon riscattato.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modale Conferma -->
+    <div id="confirm-modal" class="modal-overlay">
+        <div class="modal custom-alert-box">
+            <h3 id="confirm-title" style="color: var(--accent-gold); margin-top:0;">Conferma Riscatto</h3>
+            <p id="confirm-message" style="color:#ddd; margin: 20px 0;">Sei sicuro?</p>
+            <div style="display: flex; gap: 15px; justify-content: center;">
+                <button class="btn-action" id="btn-confirm-yes" style="background: #2e7d32; flex: 1;">SÌ, PROCEDI</button>
+                <button class="btn-action" onclick="closeConfirmModal()" style="background: #d32f2f; flex: 1;">ANNULLA</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modale Profilo -->
+    <div id="profile-modal" class="modal-overlay">
+        <div class="modal">
+            <button class="close-modal-x" onclick="closeProfileModal()">✖</button>
+            <div style="margin-bottom: 20px; text-align: left;">
+                <h2 style="color: var(--dark-pink); margin: 0; font-size: 1.4rem;">Il tuo Profilo</h2>
+            </div>
+            <div class="profile-fields-container">
+                <div class="profile-field-group">
+                    <label>NOME</label>
+                    <div class="input-wrapper">
+                        <input type="text" id="edit-nome" class="profile-readonly-input" readonly>
+                        <button class="field-edit-btn" onclick="enableSingleEdit('edit-nome')">EDIT</button>
+                    </div>
+                </div>
+                <div class="profile-field-group">
+                    <label>COGNOME</label>
+                    <div class="input-wrapper">
+                        <input type="text" id="edit-cognome" class="profile-readonly-input" readonly>
+                        <button class="field-edit-btn" onclick="enableSingleEdit('edit-cognome')">EDIT</button>
+                    </div>
+                </div>
+                <div class="profile-field-group">
+                    <label>NICKNAME</label>
+                    <div class="input-wrapper">
+                        <input type="text" id="edit-nickname" class="profile-readonly-input" readonly>
+                        <button class="field-edit-btn" onclick="enableSingleEdit('edit-nickname')">EDIT</button>
+                    </div>
+                </div>
+                <div class="profile-field-group">
+                    <label>TELEFONO</label>
+                    <div class="input-wrapper">
+                        <input type="tel" id="edit-telefono" class="profile-readonly-input" readonly>
+                        <button class="field-edit-btn" onclick="enableSingleEdit('edit-telefono')">EDIT</button>
+                    </div>
+                </div>
+            </div>
+            <button class="btn-action" id="btn-save-profile" onclick="saveProfileChanges()" style="width: 100%; margin-top: 20px; display: none; background: #4caf50;">SALVA MODIFICHE</button>
+            <button class="btn-action" onclick="logout()" style="width: 100%; margin-top: 15px; background: #d32f2f;">ESCI (LOGOUT)</button>
+        </div>
+    </div>
+
+    <!-- Modale Classifica -->
+    <div id="leaderboard-modal" class="modal-overlay">
+        <div class="modal leaderboard-box">
+            <button class="close-modal-x" onclick="closeLeaderboard()">✖</button>
+            <h2 style="color: var(--dark-pink); margin-top: 0;">🏆 Classifiche</h2>
+            <div class="tabs">
+                <button class="tab-btn active" onclick="loadLeaderboard('level')">🌟 Livello</button>
+                <button class="tab-btn" onclick="loadLeaderboard('credit')">💰 Guadagni</button>
+            </div>
+            <ul id="leaderboard-list" class="leaderboard-list">
+                <li style="color: #ccc;">Caricamento in corso...</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Alert Custom -->
+    <div id="custom-alert" class="custom-alert-overlay">
+        <div class="custom-alert-box">
+            <h3 id="custom-alert-title" class="custom-alert-title">Messaggio</h3>
+            <p id="custom-alert-message" class="custom-alert-message"></p>
+            <button class="btn-action" onclick="closeCustomAlert()" style="width: 100%;">OK</button>
+        </div>
+    </div>
+
+    <script>
+        function showCustomAlert(title, message) {
+            document.getElementById('custom-alert-title').innerText = title;
+            document.getElementById('custom-alert-message').innerText = message;
+            const overlay = document.getElementById('custom-alert');
+            overlay.style.display = 'flex';
+            void overlay.offsetWidth; 
+            overlay.classList.add('show');
+        }
+
+        function closeCustomAlert() {
+            const overlay = document.getElementById('custom-alert');
+            overlay.classList.remove('show');
+            setTimeout(() => { overlay.style.display = 'none'; }, 300);
+        }
+
+        let pendingClaimAmount = 0; 
+
+        function askConfirmClaim(amount) {
+            if (state.credit < amount) {
+                return showCustomAlert("Saldo Insufficiente", `Hai bisogno di almeno ${amount}€ per riscattare questo buono.`);
+            }
+            pendingClaimAmount = amount;
+            document.getElementById('confirm-message').innerText = `Vuoi davvero convertire ${amount}€ in un buono sconto FataNail?`;
+            
+            document.getElementById('btn-confirm-yes').onclick = function() {
+                executeClaim(pendingClaimAmount);
+                closeConfirmModal();
+            };
+            
+            document.getElementById('confirm-modal').style.display = 'flex';
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirm-modal').style.display = 'none';
+        }
+
+        const firebaseConfig = {
+          apiKey: "AIzaSyCEce7_qKZw4SVPz14EByXCkTcsfd-82nc",
+          authDomain: "glimmermatch.firebaseapp.com",
+          projectId: "glimmermatch",
+          storageBucket: "glimmermatch.firebasestorage.app",
+          messagingSenderId: "863848467850",
+          appId: "1:863848467850:web:5af2cdc046a27f78da4c73"
+        };
+
+        if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        let isRegistering = false; 
+        let currentUserData = null; 
+        let userUnsubscribe = null; 
+
+        const GEM_ICONS = [
+            `<img src="https://fatanail.it/6726-large_default/porta-lime-fatanail.jpg" class="gem-img" alt="Porta Lime">`,
+            `<img src="https://fatanail.it/7488-large_default/11-timbri-calamitati-per-kit-stickers-french-fatanail.jpg" class="gem-img" alt="Timbri">`,
+            `<img src="https://fatanail.it/7498-large_default/piastra-per-dual-form.jpg" class="gem-img" alt="Piastra">`,
+            `<img src="https://fatanail.it/7651-large_default/dual-stick-supporto-3d-per-dual-form.jpg" class="gem-img" alt="Dual Stick">`,
+            `<svg viewBox="0 0 100 100"><defs><linearGradient id="starGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#ffd700;stop-opacity:1" /><stop offset="100%" style="stop-color:#ffa500;stop-opacity:1" /></linearGradient></defs><path d="M50 5 L63 35 L95 38 L70 60 L78 92 L50 75 L22 92 L30 60 L5 38 L37 35 Z" fill="url(#starGrad)" stroke="#b8860b" stroke-width="2" /></svg>`
+        ];
+
+        const FATANAIL_VIDEOS = [
+            '5c3WV0o0HXc', 
+            'dQw4w9WgXcQ', 
+            '7-rLXGJ5ioO', 
+            '0qwiXZHcekf', 
+            'HqDiCXJdwS'   
+        ];
+
+        let rewardTimer = null;
+        let timeLeft = 15; 
+
+        function openOutOfMovesModal() {
+            document.getElementById('out-of-moves-modal').style.display = 'flex';
+            document.getElementById('rescue-btn').style.display = 'none';
+        }
+
+        function closeOutOfMovesModal() {
+            document.getElementById('out-of-moves-modal').style.display = 'none';
+            document.getElementById('out-of-moves-content').style.display = 'block';
+            document.getElementById('video-reward-content').style.display = 'none';
+            if (rewardTimer) { clearInterval(rewardTimer); rewardTimer = null; }
+            if (state.moves <= 0) { document.getElementById('rescue-btn').style.display = 'block'; }
+        }
+
+        function startVideoReward() {
+            document.getElementById('out-of-moves-content').style.display = 'none';
+            document.getElementById('video-reward-content').style.display = 'block';
+            
+            const randomVideoId = FATANAIL_VIDEOS[Math.floor(Math.random() * FATANAIL_VIDEOS.length)];
+            const videoUrl = `https://www.youtube.com/watch?v=${randomVideoId}`;
+            window.open(videoUrl, '_blank');
+
+            timeLeft = 15;
+            const timerDisplay = document.getElementById('timer-display');
+            const claimBtn = document.getElementById('claim-btn');
+            
+            claimBtn.disabled = true;
+            claimBtn.style.opacity = "0.5";
+            claimBtn.innerText = "ATTENDI...";
+            timerDisplay.innerText = timeLeft;
+
+            if (rewardTimer) clearInterval(rewardTimer);
+            
+            rewardTimer = setInterval(() => {
+                timeLeft--;
+                timerDisplay.innerText = timeLeft;
+                if (timeLeft <= 0) {
+                    clearInterval(rewardTimer);
+                    timerDisplay.innerText = "👍";
+                    claimBtn.disabled = false;
+                    claimBtn.style.opacity = "1";
+                    claimBtn.innerText = "RITIRA 5 VITE";
+                }
+            }, 1000);
+        }
+
+        function grantVideoReward() {
+            state.moves += 5;
+            saveProgress();
+            updateUI();
+            
+            document.getElementById('out-of-moves-modal').style.display = 'none';
+            document.getElementById('rescue-btn').style.display = 'none';
+            document.getElementById('out-of-moves-content').style.display = 'block';
+            document.getElementById('video-reward-content').style.display = 'none';
+
+            showCustomAlert("Energia Ricaricata! ⚡", "Grazie per aver supportato FataNail!");
+        }
+
+        function openWalletModal() {
+            document.getElementById('wallet-balance').innerText = state.credit.toFixed(2) + "€";
+            renderCoupons();
+            document.getElementById('wallet-modal').style.display = 'flex';
+        }
+
+        function renderCoupons() {
+            const list = document.getElementById('coupon-list');
+            list.innerHTML = '';
+            
+            if (currentUserData.coupons && currentUserData.coupons.length > 0) {
+                const sorted = [...currentUserData.coupons].reverse();
+                sorted.forEach(c => {
+                    const div = document.createElement('div');
+                    div.className = 'coupon-card';
+                    div.innerHTML = `
+                        <span class="coupon-value">Buono Spesa ${c.value}€</span>
+                        <span class="coupon-code">${c.code}</span>
+                        <button class="btn-copy" onclick="navigator.clipboard.writeText('${c.code}'); alert('Copiato!')">COPIA</button>
+                    `;
+                    list.appendChild(div);
+                });
+            } else {
+                list.innerHTML = '<p style="color:#666; font-size:0.8rem;">Nessun coupon riscattato.</p>';
+            }
+        }
+
+        async function executeClaim(amount) {
+            const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
+            const code = `FATA-${amount}-${randomStr}`;
+            
+            state.credit -= amount;
+            
+            const userRef = db.collection('users').doc(auth.currentUser.uid);
+            
+            try {
+                await userRef.update({
+                    credit: state.credit,
+                    coupons: firebase.firestore.FieldValue.arrayUnion({
+                        code: code,
+                        value: amount,
+                        date: new Date().toISOString()
+                    })
+                });
+                
+                showCustomAlert("Buono Generato! 🎉", `Il tuo codice: ${code}\nÈ stato salvato nel tuo portafoglio.`);
+                openWalletModal(); 
+                updateUI();
+            } catch (error) {
+                showCustomAlert("Errore", "Impossibile generare il buono: " + error.message);
+                state.credit += amount; 
+            }
+        }
+
+        const WORLD_CONFIG = {
+            1: { name: "Bosco di Fragola", bg: "https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?q=80&w=1920&auto=format&fit=crop" },
+            2: { name: "Valle di Cristallo", bg: "https://images.unsplash.com/photo-1534067783941-51c9c23ecefd?q=80&w=1920&auto=format&fit=crop" },
+            3: { name: "Laguna di Perla", bg: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1920&auto=format&fit=crop" },
+            4: { name: "Regno del Tramonto", bg: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=1920&auto=format&fit=crop" }
+        };
+
+        let state = { level: 1, maxLevel: 1, credit: 0.00, exp: 0, expNeeded: 100, moves: 10, grid: [], isBusy: false };
+        const GRID_SIZE = 8;
+        const gridElement = document.getElementById('grid');
+
+        function switchAuthMode(mode) {
+            isRegistering = (mode === 'register');
+            document.getElementById('register-form').style.display = isRegistering ? 'block' : 'none';
+            document.getElementById('auth-btn').innerText = isRegistering ? 'CREA ACCOUNT' : 'ENTRA';
+            document.getElementById('tab-login').classList.toggle('active', !isRegistering);
+            document.getElementById('tab-register').classList.toggle('active', isRegistering);
+        }
+
+        async function handleAuth() {
+            const email = document.getElementById('auth-email').value;
+            const password = document.getElementById('auth-password').value;
+            const btn = document.getElementById('auth-btn');
+            
+            try {
+                if (isRegistering) {
+                    const nome = document.getElementById('reg-nome').value;
+                    const cognome = document.getElementById('reg-cognome').value;
+                    const nickname = document.getElementById('reg-nickname').value;
+                    const telefono = document.getElementById('reg-telefono').value;
+
+                    if(!nome || !cognome || !nickname || !email || !password) {
+                        return showCustomAlert("Attenzione", "Compila tutti i campi obbligatori per registrarti.");
+                    }
+
+                    btn.innerText = "Creazione...";
+                    btn.disabled = true;
+
+                    const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                    
+                    await db.collection('users').doc(userCredential.user.uid).set({
+                        nome: nome, cognome: cognome, nickname: nickname, telefono: telefono,
+                        email: email, level: 1, credit: 0.00, exp: 0, moves: 10, coupons: []
+                    });
+                    
+                    showCustomAlert("Benvenuto!", "Account creato con successo.");
+                } else {
+                    btn.innerText = "Accesso...";
+                    btn.disabled = true;
+                    await auth.signInWithEmailAndPassword(email, password);
+                }
+            } catch (error) {
+                showCustomAlert("Errore", error.message);
+                btn.innerText = isRegistering ? 'CREA ACCOUNT' : 'ENTRA';
+                btn.disabled = false;
+            }
+        }
+
+        auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                document.getElementById('auth-modal').style.display = 'none';
+                document.getElementById('profile-btn-floating').style.display = 'flex';
+                document.getElementById('wallet-btn-floating').style.display = 'flex';
+                
+                const userRef = db.collection('users').doc(user.uid);
+                const docSnap = await userRef.get();
+                if (!docSnap.exists) {
+                    await userRef.set({
+                        nome: "Giocatore", cognome: "", nickname: "User" + Math.floor(Math.random()*1000), 
+                        telefono: "", email: user.email, level: 1, credit: 0.00, exp: 0, moves: 10, coupons: []
+                    });
+                }
+                
+                if (userUnsubscribe) userUnsubscribe(); 
+                
+                userUnsubscribe = userRef.onSnapshot((snapshot) => {
+                    if (snapshot.exists) {
+                        currentUserData = snapshot.data();
+                        state.level = parseInt(currentUserData.level) || 1;
+                        state.credit = currentUserData.credit || 0;
+                        state.exp = currentUserData.exp || 0;
+                        state.moves = (currentUserData.moves !== undefined) ? currentUserData.moves : 10; 
+                        
+                        updateWorld(); 
+                        updateUI();
+                        
+                        if(state.moves > 0) {
+                            closeOutOfMovesModal();
+                            document.getElementById('rescue-btn').style.display = 'none';
+                        } else {
+                            if (document.getElementById('out-of-moves-modal').style.display === 'none') {
+                                document.getElementById('rescue-btn').style.display = 'block';
+                            }
+                        }
+                    }
+                });
+
+            } else {
+                if (userUnsubscribe) { userUnsubscribe(); userUnsubscribe = null; }
+                document.getElementById('auth-modal').style.display = 'flex';
+                document.getElementById('profile-btn-floating').style.display = 'none';
+                document.getElementById('wallet-btn-floating').style.display = 'none';
+                document.getElementById('rescue-btn').style.display = 'none';
+                document.getElementById('auth-btn').disabled = false;
+                document.getElementById('auth-btn').innerText = isRegistering ? 'CREA ACCOUNT' : 'ENTRA';
+            }
+        });
+
+        function saveProgress() {
+            const user = auth.currentUser;
+            if (user) {
+                db.collection('users').doc(user.uid).update({
+                    level: state.level, credit: state.credit, exp: state.exp, moves: state.moves
+                }).catch(err => console.error("Errore server:", err));
+            }
+        }
+
+        function openProfileModal() {
+            if(currentUserData) {
+                document.getElementById('edit-nome').value = currentUserData.nome || "";
+                document.getElementById('edit-cognome').value = currentUserData.cognome || "";
+                document.getElementById('edit-nickname').value = currentUserData.nickname || "";
+                document.getElementById('edit-telefono').value = currentUserData.telefono || "";
+            }
+            
+            const inputs = document.querySelectorAll('.profile-readonly-input');
+            inputs.forEach(input => { 
+                input.setAttribute('readonly', true); 
+                input.classList.remove('editable'); 
+            });
+            
+            document.getElementById('btn-save-profile').style.display = 'none';
+            document.getElementById('profile-modal').style.display = 'flex';
+        }
+
+        function closeProfileModal() { document.getElementById('profile-modal').style.display = 'none'; }
+
+        function enableSingleEdit(inputId) {
+            const input = document.getElementById(inputId);
+            input.removeAttribute('readonly'); 
+            input.classList.add('editable');
+            input.focus();
+            document.getElementById('btn-save-profile').style.display = 'block';
+        }
+
+        async function saveProfileChanges() {
+            const user = auth.currentUser;
+            if(!user) return;
+
+            const nome = document.getElementById('edit-nome').value;
+            const cognome = document.getElementById('edit-cognome').value;
+            const nickname = document.getElementById('edit-nickname').value;
+            const telefono = document.getElementById('edit-telefono').value;
+
+            try {
+                await db.collection('users').doc(user.uid).update({ nome, cognome, nickname, telefono });
+                showCustomAlert("Fatto!", "Profilo aggiornato.");
+                openProfileModal(); 
+            } catch(e) {
+                showCustomAlert("Errore", e.message);
+            }
+        }
+
+        function logout() {
+            auth.signOut();
+            closeProfileModal();
+            state.credit = 0; state.level = 1; state.exp = 0; state.moves = 10;
+            updateUI();
+        }
+
+        function showLeaderboard() {
+            document.getElementById('leaderboard-modal').style.display = 'flex';
+            loadLeaderboard('level');
+        }
+
+        function closeLeaderboard() { document.getElementById('leaderboard-modal').style.display = 'none'; }
+
+        async function loadLeaderboard(orderByField) {
+            const tabs = document.querySelectorAll('.leaderboard-box .tab-btn');
+            tabs[0].classList.toggle('active', orderByField === 'level');
+            tabs[1].classList.toggle('active', orderByField === 'credit');
+
+            const listElement = document.getElementById('leaderboard-list');
+            listElement.innerHTML = '<li style="color: #ccc;">Caricamento in corso...</li>';
+
+            try {
+                const snapshot = await db.collection('users').orderBy(orderByField, 'desc').limit(10).get();
+                listElement.innerHTML = ''; 
+                let rank = 1;
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const scoreDisplay = orderByField === 'level' ? `Lvl ${data.level}` : `€${data.credit.toFixed(2)}`;
+                    const avatarUrl = data.foto || `https://ui-avatars.com/api/?background=random&color=fff&name=${data.nickname}`;
+                    
+                    const li = document.createElement('li');
+                    li.innerHTML = `
+                        <div class="rank-user">
+                            <span style="color: #888; width: 20px;">${rank}°</span>
+                            <img src="${avatarUrl}" class="rank-avatar">
+                            <span style="color: white;">${data.nickname}</span>
+                        </div>
+                        <div class="rank-score">${scoreDisplay}</div>
+                    `;
+                    listElement.appendChild(li);
+                    rank++;
+                });
+            } catch (error) { listElement.innerHTML = '<li style="color: #f44336;">Errore nel caricamento dati.</li>'; }
+        }
+
+        function init() { createBoard(); updateUI(); setupStars(); window.addEventListener('resize', setupStars); }
+
+        function createBoard() {
+            gridElement.innerHTML = '';
+            state.grid = [];
+            for (let r = 0; r < GRID_SIZE; r++) {
+                state.grid[r] = [];
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    let type;
+                    // Evita match iniziali
+                    do {
+                        type = Math.floor(Math.random() * GEM_ICONS.length);
+                    } while (
+                        (c > 1 && state.grid[r][c-1].type === type && state.grid[r][c-2].type === type) ||
+                        (r > 1 && state.grid[r-1][c].type === type && state.grid[r-2][c].type === type)
+                    );
+
+                    const gem = document.createElement('div');
+                    gem.className = (type === 4) ? 'gem star-type' : 'gem product-type';
+                    gem.innerHTML = GEM_ICONS[type];
+                    gem.dataset.r = r;
+                    gem.dataset.c = c;
+                    
+                    gem.addEventListener('mousedown', startDrag);
+                    gem.addEventListener('touchstart', startDrag, {passive: false});
+
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.appendChild(gem);
+                    gridElement.appendChild(cell);
+
+                    state.grid[r][c] = { type, element: gem };
+                }
+            }
+        }
+
+        let dragGem = null, startX, startY;
+
+        function startDrag(e) {
+            if (state.isBusy || state.moves <= 0) return;
+            const p = e.touches ? e.touches[0] : e;
+            dragGem = e.currentTarget; startX = p.clientX; startY = p.clientY;
+            dragGem.classList.add('dragging');
+
+            document.addEventListener('mousemove', onDrag);
+            document.addEventListener('touchmove', onDrag, {passive: false});
+            document.addEventListener('mouseup', stopDrag);
+            document.addEventListener('touchend', stopDrag);
+        }
+
+        function onDrag(e) {
+            if (!dragGem) return;
+            const p = e.touches ? e.touches[0] : e;
+            const dx = p.clientX - startX; const dy = p.clientY - startY;
+            
+            if (Math.abs(dx) > 40 || Math.abs(dy) > 40) {
+                const r = parseInt(dragGem.dataset.r); const c = parseInt(dragGem.dataset.c);
+                let tr = r, tc = c;
+                if (Math.abs(dx) > Math.abs(dy)) tc = dx > 0 ? c + 1 : c - 1;
+                else tr = dy > 0 ? r + 1 : r - 1;
+
+                if (tr >= 0 && tr < GRID_SIZE && tc >= 0 && tc < GRID_SIZE) {
+                    stopDrag(); attemptSwap(r, c, tr, tc);
+                }
+            } else { dragGem.style.transform = `translate(${dx}px, ${dy}px) scale(1.1)`; }
+        }
+
+        function stopDrag() {
+            if (dragGem) { dragGem.classList.remove('dragging'); dragGem.style.transform = ''; }
+            dragGem = null;
+            document.removeEventListener('mousemove', onDrag);
+            document.removeEventListener('touchmove', onDrag);
+        }
+
+        async function attemptSwap(r1, c1, r2, c2) {
+            state.isBusy = true; swapGems(r1, c1, r2, c2);
+
+            const matches = findMatches();
+            if (matches.length > 0) {
+                state.moves--; saveProgress(); await processMatches();
+            } else {
+                await new Promise(res => setTimeout(res, 300));
+                swapGems(r1, c1, r2, c2);
+            }
+            
+            state.isBusy = false; updateUI(); checkGameOver();
+        }
+
+        function swapGems(r1, c1, r2, c2) {
+            const g1 = state.grid[r1][c1];
+            const g2 = state.grid[r2][c2];
+            
+            const tempType = g1.type;
+            g1.type = g2.type;
+            g2.type = tempType;
+
+            // Aggiorna contenuto HTML
+            g1.element.innerHTML = GEM_ICONS[g1.type];
+            g2.element.innerHTML = GEM_ICONS[g2.type];
+
+            // Aggiorna classi CSS
+            g1.element.className = (g1.type === 4) ? 'gem star-type' : 'gem product-type';
+            g2.element.className = (g2.type === 4) ? 'gem star-type' : 'gem product-type';
+        }
+
+        function findMatches() {
+            let matches = [];
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE - 2; c++) {
+                    if (state.grid[r][c].type === state.grid[r][c+1].type && state.grid[r][c].type === state.grid[r][c+2].type) {
+                        matches.push({r, c}, {r, c: c+1}, {r, c: c+2});
+                    }
+                }
+            }
+            for (let c = 0; c < GRID_SIZE; c++) {
+                for (let r = 0; r < GRID_SIZE - 2; r++) {
+                    if (state.grid[r][c].type === state.grid[r+1][c].type && state.grid[r][c].type === state.grid[r+2][c].type) {
+                        matches.push({r, c}, {r: r+1, c}, {r: r+2, c});
+                    }
+                }
+            }
+            return matches.filter((v,i,a)=>a.findIndex(t=>(t.r===v.r && t.c===v.c))===i);
+        }
+
+        async function processMatches() {
+            let matches = findMatches();
+            if (matches.length === 0) return;
+
+            matches.forEach(m => { state.grid[m.r][m.c].element.classList.add('match'); });
+            
+            state.credit += (matches.length * 0.01);
+            state.exp += (matches.length * 5);
+            
+            if (state.exp >= state.expNeeded) { levelUp(); }
+
+            await new Promise(res => setTimeout(res, 400));
+            
+            matches.forEach(m => {
+                state.grid[m.r][m.c].type = Math.floor(Math.random() * GEM_ICONS.length);
+                state.grid[m.r][m.c].element.innerHTML = GEM_ICONS[state.grid[m.r][m.c].type];
+                // Aggiorna classe anche qui
+                state.grid[m.r][m.c].element.className = (state.grid[m.r][m.c].type === 4) ? 'gem star-type' : 'gem product-type';
+                state.grid[m.r][m.c].element.classList.remove('match');
+            });
+
+            updateUI(); saveProgress(); await processMatches(); 
+        }
+
+        function levelUp() {
+            state.level++;
+            if (state.level > state.maxLevel) state.maxLevel = state.level;
+            state.exp = 0; state.expNeeded += 50;
+            updateWorld();
+        }
+
+        function updateWorld() {
+            const maxWorlds = Object.keys(WORLD_CONFIG).length;
+            let worldIndex = ((state.level - 1) % maxWorlds) + 1; 
+
+            const config = WORLD_CONFIG[worldIndex];
+            document.getElementById('game-bg').style.backgroundImage = `url('${config.bg}')`;
+            document.getElementById('world-name').innerText = config.name;
+        }
+
+        function updateUI() {
+            document.getElementById('credit-val').innerText = state.credit.toFixed(2);
+            document.getElementById('level-val').innerText = state.level;
+            document.getElementById('moves-val').innerText = state.moves;
+            document.getElementById('progress-fill').style.width = `${(state.exp / state.expNeeded) * 100}%`;
+        }
+
+        function checkGameOver() {
+            if (state.moves <= 0 && !state.isBusy) { 
+                document.getElementById('out-of-moves-modal').style.display = 'flex'; 
+                document.getElementById('rescue-btn').style.display = 'none'; 
+            }
+        }
+
+        function setupStars() {
+            const canvas = document.getElementById('stars-canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+            
+            const stars = Array.from({length: 50}, () => ({
+                x: Math.random() * canvas.width, y: Math.random() * canvas.height,
+                size: Math.random() * 2, opacity: Math.random(), speed: 0.01 + Math.random() * 0.02
+            }));
+
+            function animate() {
+                ctx.clearRect(0,0, canvas.width, canvas.height);
+                stars.forEach(s =>
