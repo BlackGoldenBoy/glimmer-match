@@ -459,6 +459,20 @@
                         <button class="field-edit-btn" onclick="enableSingleEdit('edit-nickname')">EDIT</button>
                     </div>
                 </div>
+                <div class="profile-field-group">
+                    <label>EMAIL</label>
+                    <div class="input-wrapper">
+                        <input type="email" id="edit-email" class="profile-readonly-input" readonly>
+                        <button class="field-edit-btn" onclick="enableSingleEdit('edit-email')">EDIT</button>
+                    </div>
+                </div>
+                <div class="profile-field-group">
+                    <label>NUOVA PASSWORD</label>
+                    <div class="input-wrapper">
+                        <input type="password" id="edit-password" class="profile-readonly-input" placeholder="Lascia vuoto per non cambiare" readonly>
+                        <button class="field-edit-btn" onclick="enableSingleEdit('edit-password')">EDIT</button>
+                    </div>
+                </div>
             </div>
             <button class="btn-action" id="btn-save-profile" onclick="saveProfileChanges()" style="width: 100%; margin-top: 20px; display: none; background: #4caf50;">SALVA MODIFICHE</button>
             <button class="btn-action" onclick="logout()" style="width: 100%; margin-top: 15px; background: #d32f2f;">ESCI (LOGOUT)</button>
@@ -745,7 +759,21 @@
                     await auth.signInWithEmailAndPassword(email, password);
                 }
             } catch (error) {
-                showCustomAlert("Errore", error.message);
+                let errorMessage = "Si è verificato un errore imprevisto.";
+                
+                if (error.code === 'auth/email-already-in-use') {
+                    errorMessage = "Questa email è già registrata. Prova ad accedere invece di registrarti.";
+                } else if (error.code === 'auth/invalid-email') {
+                    errorMessage = "L'indirizzo email inserito non è valido.";
+                } else if (error.code === 'auth/weak-password') {
+                    errorMessage = "La password è troppo debole. Scegli una password di almeno 6 caratteri.";
+                } else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+                    errorMessage = "Email o password non corretti. Riprova.";
+                } else {
+                    errorMessage = error.message; // Fallback al messaggio originale se non mappato
+                }
+
+                showCustomAlert("Errore di Autenticazione", errorMessage);
                 btn.innerText = isRegistering ? 'CREA ACCOUNT' : 'ENTRA';
                 btn.disabled = false;
             }
@@ -813,6 +841,8 @@
         function openProfileModal() {
             if(currentUserData) {
                 document.getElementById('edit-nickname').value = currentUserData.nickname || "";
+                document.getElementById('edit-email').value = auth.currentUser ? auth.currentUser.email : "";
+                document.getElementById('edit-password').value = "";
             }
             
             const inputs = document.querySelectorAll('.profile-readonly-input');
@@ -840,25 +870,63 @@
             if(!user) return;
 
             const nickname = document.getElementById('edit-nickname').value.trim();
+            const email = document.getElementById('edit-email').value.trim();
+            const password = document.getElementById('edit-password').value;
             
-            if (!nickname) {
-                return showCustomAlert("Attenzione", "Il nickname non può essere vuoto.");
+            if (!nickname || !email) {
+                return showCustomAlert("Attenzione", "Nickname ed Email non possono essere vuoti.");
             }
 
             try {
-                // Controllo unicità nickname se è stato modificato
+                let requiresRelogin = false;
+
+                // 1. Aggiorna Email se cambiata
+                if (email !== user.email) {
+                    await user.updateEmail(email);
+                    await db.collection('users').doc(user.uid).update({ email: email });
+                    requiresRelogin = true;
+                }
+
+                // 2. Aggiorna Password se inserita
+                if (password) {
+                    if (password.length < 6) {
+                        return showCustomAlert("Attenzione", "La nuova password deve avere almeno 6 caratteri.");
+                    }
+                    await user.updatePassword(password);
+                    requiresRelogin = true;
+                }
+
+                // 3. Aggiorna Nickname se cambiato
                 if (nickname !== currentUserData.nickname) {
                     const nicknameQuery = await db.collection('users').where('nickname', '==', nickname).get();
                     if (!nicknameQuery.empty) {
                         return showCustomAlert("Attenzione", "Questo nickname è già in uso. Scegline un altro.");
                     }
+                    await db.collection('users').doc(user.uid).update({ nickname });
                 }
 
-                await db.collection('users').doc(user.uid).update({ nickname });
-                showCustomAlert("Fatto!", "Profilo aggiornato.");
-                openProfileModal(); 
-            } catch(e) {
-                showCustomAlert("Errore", e.message);
+                if (requiresRelogin) {
+                    showCustomAlert("Fatto!", "Profilo aggiornato. Per motivi di sicurezza, devi effettuare nuovamente l'accesso.");
+                    logout();
+                } else {
+                    showCustomAlert("Fatto!", "Profilo aggiornato con successo.");
+                    openProfileModal(); 
+                }
+
+            } catch(error) {
+                let errorMessage = "Si è verificato un errore durante l'aggiornamento.";
+                
+                if (error.code === 'auth/requires-recent-login') {
+                    errorMessage = "Per cambiare email o password devi esserti autenticato di recente. Fai il logout e accedi di nuovo, poi riprova.";
+                } else if (error.code === 'auth/email-already-in-use') {
+                    errorMessage = "Questa email è già utilizzata da un altro account.";
+                } else if (error.code === 'auth/invalid-email') {
+                    errorMessage = "L'indirizzo email inserito non è valido.";
+                } else {
+                    errorMessage = error.message;
+                }
+
+                showCustomAlert("Errore", errorMessage);
             }
         }
 
