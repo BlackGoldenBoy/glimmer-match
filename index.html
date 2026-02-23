@@ -156,15 +156,15 @@
 
         .falling-coin {
             position: fixed;
-            top: -50px;
             font-size: 2rem;
             pointer-events: none;
             z-index: 999;
-            animation: coinFall 2s linear forwards;
+            animation: coinFall 1.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
         }
         @keyframes coinFall {
-            0% { transform: translateY(0) rotate(0deg); opacity: 1; }
-            100% { transform: translateY(110vh) rotate(360deg); opacity: 0; }
+            0% { transform: translate(0, 0) scale(0.5) rotate(0deg); opacity: 1; }
+            20% { transform: translate(var(--tx), -50px) scale(1.2) rotate(90deg); opacity: 1; }
+            100% { transform: translate(calc(var(--tx) * 2), 100vh) scale(1) rotate(360deg); opacity: 0; }
         }
 
         /* Floating Buttons */
@@ -999,16 +999,27 @@
             }, 1000);
         }
 
-        function createFallingCoins(count) {
+        function createFallingCoins(count, r, c) {
+            const cell = state.grid[r][c].element.parentElement;
+            const rect = cell.getBoundingClientRect();
+            const startX = rect.left + rect.width / 2;
+            const startY = rect.top + rect.height / 2;
+
             for (let i = 0; i < count; i++) {
                 setTimeout(() => {
                     const coin = document.createElement('div');
                     coin.className = 'falling-coin';
                     coin.innerText = '🪙';
-                    coin.style.left = `${Math.random() * 100}vw`;
+                    coin.style.left = `${startX}px`;
+                    coin.style.top = `${startY}px`;
+                    
+                    // Random horizontal spread
+                    const spread = (Math.random() - 0.5) * 150; 
+                    coin.style.setProperty('--tx', `${spread}px`);
+                    
                     document.body.appendChild(coin);
                     
-                    setTimeout(() => { coin.remove(); }, 2000);
+                    setTimeout(() => { coin.remove(); }, 1500);
                 }, i * 100);
             }
         }
@@ -1032,6 +1043,10 @@
                 let centerR = Math.floor(group.reduce((sum, m) => sum + m.r, 0) / group.length);
                 let centerC = Math.floor(group.reduce((sum, m) => sum + m.c, 0) / group.length);
                 showFloatingText(`+${gain.toFixed(2)}€`, centerR, centerC);
+                
+                if (gain > 0) {
+                    createFallingCoins(group.length * 2, centerR, centerC);
+                }
             });
 
             matches.forEach(m => { state.grid[m.r][m.c].element.classList.add('match'); });
@@ -1040,10 +1055,6 @@
             state.exp += (matches.length * 5);
             
             if (state.exp >= state.expNeeded) { levelUp(); }
-            
-            if (totalGain > 0) {
-                createFallingCoins(matches.length * 2);
-            }
 
             await new Promise(res => setTimeout(res, 400));
             
